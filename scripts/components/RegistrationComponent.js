@@ -1,5 +1,4 @@
 var React = require("react");
-var UserModel = require("../models/UserModel")
 var validator = require("validator");
 var _ = require("backbone/node_modules/underscore");
 var errorStyling = {
@@ -43,16 +42,16 @@ module.exports = React.createClass({
         var userEmail = this.refs.email.getDOMNode().value
         var pass = this.refs.password.getDOMNode().value
         var passCon = this.refs.passwordConf.getDOMNode().value
-        var newUser = new UserModel({
+        var newUser = {
             username: userEmail,
             password: pass
-        });
-        console.log(newUser)
-        if(!newUser.get("username") || !newUser.get("password")|| !passCon){
-            if(!newUser.get("username")){
+        };
+        
+        if(!newUser.username || !newUser.password|| !passCon){
+            if(!newUser.username){
                 error.email = " Please enter an email address";
             }
-            if(!newUser.get("password")){
+            if(!newUser.password){
                 error.password = " Please enter a password";
             }
             if(!passCon){
@@ -61,20 +60,20 @@ module.exports = React.createClass({
         } 
 
         else {
-            if(!validator.isEmail(newUser.get("username"))){
+            if(!validator.isEmail(newUser.username)){
                 error.email = " The email looks wrong";
             }
-            if(passCon !== newUser.get("password")){
+            if(passCon !== newUser.password){
                 error.passwordConf = " Passwords do not match";
             } 
         }
         this.setState({errors: error});
 
         if(_.isEmpty(error)) {
-			newUser.save(null,
+			this.props.user.save(newUser,
 				{
 					success: function(user) {
-	       				myApp.navigate("profile", {trigger:true});
+	       				myApp.navigate("admin", {trigger:true});
 	       			},
 					error: function(user, response) {
 	        			if(response.responseJSON.code === 202) {

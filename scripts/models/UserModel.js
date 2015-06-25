@@ -3,7 +3,6 @@ var Backbone = require("backparse")({
 	apiKey:"ttwYgdcxcKW8Ef8FJhUWdVUtl7DVZmAd6CR7GbJp",
 	apiVersion:1
 });
-var Vali
 
 module.exports = Backbone.Model.extend({
 	defaults: {

@@ -3433,6 +3433,7 @@ Backbone.$ = $;
 var _ = require('backbone/node_modules/underscore');
 
 var parseClassNameProperty = 'parseClassName';
+var sessionToken = window.localStorage.getItem('sessionToken');
 
 // Update collection parse
 var original_parse = Backbone.Collection.prototype.parse; 
@@ -3468,9 +3469,87 @@ var ajaxSync = Backbone.sync;
 module.exports = function(parseSettings) {
 	parseSettings.apiVersion = parseSettings.apiVersion || 1;
 
+	function getHeaders() {
+		var headers = {
+			"X-Parse-Application-Id": parseSettings.appId,
+			"X-Parse-REST-API-Key": parseSettings.apiKey
+		};
+		if(sessionToken) {
+			headers['X-Parse-Session-Token'] = sessionToken;
+		}
+
+		console.log('getHeaders', headers);
+
+		return headers;
+	}
+
 	// Update model parse
 	var ParseModel = {
+		me: function(options) {
+			var self = this;
+			options = options || {};
+			Backbone.$.ajax({
+				//data
+				contentType: "application/json",
+				processData: false,
+				dataType: 'json',
+				data: '',
+
+				//action
+				url: 'https://api.parse.com/' + parseSettings.apiVersion + '/users/me',
+				type: 'GET',
+
+				//authentication
+				headers: getHeaders()
+			})
+			.success(function(data) {
+				self.set(data);
+				if(options.success) {
+					options.success(self);
+				}
+			})
+			.error(function(response) {
+				if(options.error) {
+					options.error(self, response);
+				}
+			});
+		},
+		logout: function(options) {
+			var self = this;
+			sessionToken = null;
+			this.clear();
+			window.localStorage.removeItem('sessionToken');
+			options = options || {};
+			Backbone.$.ajax({
+				//data
+				contentType: "application/json",
+				processData: false,
+				dataType: 'json',
+				data: '',
+
+				//action
+				url: 'https://api.parse.com/' + parseSettings.apiVersion + '/logout',
+				type: 'POST',
+
+				//authentication
+				headers: getHeaders()
+			})
+			.success(function(data) {
+				self.set(data);
+				if(options.success) {
+					options.success(self);
+				}
+			})
+			.error(function(response) {
+				if(options.error) {
+					options.error(self, response);
+				}
+			});
+		},
 		login : function(credentials, options) {
+			var self = this;
+
+			options = options || {};
 
 			if(!this.__proto__.isUser) {
 				throw 'Cannot call `login` on non-user models. Set the `isUser` property to `true` on this model to make it a user model.';
@@ -3483,8 +3562,7 @@ module.exports = function(parseSettings) {
 			if(!credentials.hasOwnProperty('password')) {
 				throw 'Cannot call `login` without a `password`.';
 			}
-
-			var self = this;
+			
 			Backbone.$.ajax({
 				//data
 				contentType: "application/json",
@@ -3499,12 +3577,11 @@ module.exports = function(parseSettings) {
 				type: 'GET',
 
 				//authentication
-				headers: {
-					"X-Parse-Application-Id": parseSettings.appId,
-					"X-Parse-REST-API-Key": parseSettings.apiKey
-				}
+				headers: getHeaders()
 			})
 			.success(function(data) {
+				sessionToken = data.sessionToken;
+				window.localStorage.setItem('sessionToken', sessionToken);
 				self.set(data);
 				if(options.success) {
 					options.success(self);
@@ -3555,10 +3632,7 @@ module.exports = function(parseSettings) {
 			type: type,
 
 			//authentication
-			headers: {
-				"X-Parse-Application-Id": parseSettings.appId,
-				"X-Parse-REST-API-Key": parseSettings.apiKey
-			}
+			headers: getHeaders()
 		};
 
 		return $.ajax(_.extend(options, request));
@@ -33399,6 +33473,105 @@ module.exports = require('./lib/React');
 "use strict";
 
 var React = require("react");
+var validator = require("validator");
+var _ = require("backbone/node_modules/underscore");
+var PostModel = require("../models/PostModel");
+var errorStyling = {
+    color: "red"
+};
+
+module.exports = React.createClass({
+    displayName: "exports",
+
+    getInitialState: function getInitialState() {
+        return {
+            errors: {}
+        };
+    },
+    render: function render() {
+        var genericError = null;
+        if (this.state.errors.generic) {
+            genericError = React.createElement(
+                "div",
+                null,
+                this.state.errors.generic
+            );
+        }
+        return React.createElement(
+            "div",
+            null,
+            React.createElement(
+                "h3",
+                null,
+                "New Post"
+            ),
+            React.createElement(
+                "div",
+                null,
+                genericError
+            ),
+            React.createElement(
+                "form",
+                { onSubmit: this.onPost },
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "label",
+                        null,
+                        "Title"
+                    ),
+                    React.createElement("input", { type: "text", ref: "title", placeholder: "Title" }),
+                    React.createElement(
+                        "span",
+                        { style: errorStyling },
+                        this.state.errors.title
+                    ),
+                    React.createElement("br", null)
+                ),
+                React.createElement(
+                    "div",
+                    null,
+                    React.createElement(
+                        "label",
+                        null,
+                        "Body"
+                    ),
+                    React.createElement("textarea", { type: "password", ref: "body", placeholder: "Body" }),
+                    React.createElement(
+                        "span",
+                        { style: errorStyling },
+                        this.state.errors.body
+                    ),
+                    React.createElement("br", null)
+                ),
+                React.createElement(
+                    "button",
+                    null,
+                    "Submit"
+                )
+            )
+        );
+    },
+    onPost: function onPost(e) {
+        e.preventDefault();
+        var post = new PostModel({
+            title: this.refs.title.getDOMNode().value,
+            body: this.refs.body.getDOMNode().value
+        });
+
+        if (post.isValid()) {
+            post.save();
+        } else {
+            this.setState({ errors: { generic: post.validationError } });
+        }
+    }
+});
+
+},{"../models/PostModel":169,"backbone/node_modules/underscore":2,"react":160,"validator":161}],163:[function(require,module,exports){
+"use strict";
+
+var React = require("react");
 
 module.exports = React.createClass({
     displayName: "exports",
@@ -33442,15 +33615,24 @@ module.exports = React.createClass({
     }
 });
 
-},{"react":160}],163:[function(require,module,exports){
+},{"react":160}],164:[function(require,module,exports){
 "use strict";
 
 var React = require("react");
-var UserModel = require("../models/UserModel");
+var validator = require("validator");
+var errorStyling = {
+	color: "red",
+	transition: "color ease 1s"
+};
 
 module.exports = React.createClass({
 	displayName: "exports",
 
+	getInitialState: function getInitialState() {
+		return {
+			errors: {}
+		};
+	},
 	render: function render() {
 		return React.createElement(
 			"div",
@@ -33472,19 +33654,106 @@ module.exports = React.createClass({
 					"div",
 					null,
 					React.createElement("input", { type: "password", ref: "password", placeholder: "Password" })
+				),
+				React.createElement(
+					"button",
+					null,
+					"Login"
 				)
 			)
 		);
 	},
+	hasError: function hasError(errors) {
+		for (var i in errors) {
+			if (errors[i]) {
+				return true;
+			}
+		}
+		return false;
+	},
 	login: function login(e) {
 		e.preventDefault();
+		var that = this;
 		var myApp = this.props.router;
+		var login = {
+			username: this.refs.email.getDOMNode().value,
+			password: this.refs.password.getDOMNode().value
+		};
 
-		myApp.navigate("profile", { trigger: true });
+		var errors = this.getInitialState().errors;
+
+		if (!login.username) {
+			errors.email = "Please enter an email address.";
+		} else if (!validator.isEmail(login.username)) {
+			errors.email = "This looks like an invalid email address.";
+		}
+
+		if (!login.password) {
+			errors.password = "Please enter a password.";
+		}
+
+		this.setState({ errors: errors });
+
+		if (!this.hasError(errors)) {
+			this.props.user.login(login, {
+				success: function success(userModel) {
+					myApp.navigate("admin", { trigger: true });
+				},
+				error: function error(userModel, response) {
+					that.setState({ errors: { generic: response.responseJSON.error } });
+				}
+			});
+		}
 	}
 });
 
-},{"../models/UserModel":167,"react":160}],164:[function(require,module,exports){
+},{"react":160,"validator":161}],165:[function(require,module,exports){
+"use strict";
+
+var React = require("react");
+var PostModel = require("../models/PostModel");
+
+module.exports = React.createClass({
+	displayName: "exports",
+
+	getInitialState: function getInitialState() {
+		var that = this;
+		var post = new PostModel({
+			objectId: this.props.postId
+		});
+		post.fetch();
+		post.on("change", function () {
+			that.forceUpdate();
+		});
+
+		return {
+			post: post
+		};
+	},
+
+	render: function render() {
+		return React.createElement(
+			"div",
+			null,
+			React.createElement(
+				"div",
+				null,
+				React.createElement(
+					"h1",
+					null,
+					this.state.post.get("title")
+				),
+				React.createElement(
+					"p",
+					null,
+					this.state.post.get("body")
+				)
+			)
+		);
+	}
+});
+
+},{"../models/PostModel":169,"react":160}],166:[function(require,module,exports){
 "use strict";
 
 var React = require("react");
@@ -33518,11 +33787,10 @@ module.exports = React.createClass({
     }
 });
 
-},{"react":160}],165:[function(require,module,exports){
+},{"react":160}],167:[function(require,module,exports){
 "use strict";
 
 var React = require("react");
-var UserModel = require("../models/UserModel");
 var validator = require("validator");
 var _ = require("backbone/node_modules/underscore");
 var errorStyling = {
@@ -33599,35 +33867,35 @@ module.exports = React.createClass({
         var userEmail = this.refs.email.getDOMNode().value;
         var pass = this.refs.password.getDOMNode().value;
         var passCon = this.refs.passwordConf.getDOMNode().value;
-        var newUser = new UserModel({
+        var newUser = {
             username: userEmail,
             password: pass
-        });
-        console.log(newUser);
-        if (!newUser.get("username") || !newUser.get("password") || !passCon) {
-            if (!newUser.get("username")) {
+        };
+
+        if (!newUser.username || !newUser.password || !passCon) {
+            if (!newUser.username) {
                 _error.email = " Please enter an email address";
             }
-            if (!newUser.get("password")) {
+            if (!newUser.password) {
                 _error.password = " Please enter a password";
             }
             if (!passCon) {
                 _error.passwordConf = " Please confirm your password";
             }
         } else {
-            if (!validator.isEmail(newUser.get("username"))) {
+            if (!validator.isEmail(newUser.username)) {
                 _error.email = " The email looks wrong";
             }
-            if (passCon !== newUser.get("password")) {
+            if (passCon !== newUser.password) {
                 _error.passwordConf = " Passwords do not match";
             }
         }
         this.setState({ errors: _error });
 
         if (_.isEmpty(_error)) {
-            newUser.save(null, {
+            this.props.user.save(newUser, {
                 success: function success(user) {
-                    myApp.navigate("profile", { trigger: true });
+                    myApp.navigate("admin", { trigger: true });
                 },
                 error: function error(user, response) {
                     if (response.responseJSON.code === 202) {
@@ -33641,7 +33909,7 @@ module.exports = React.createClass({
     }
 });
 
-},{"../models/UserModel":167,"backbone/node_modules/underscore":2,"react":160,"validator":161}],166:[function(require,module,exports){
+},{"backbone/node_modules/underscore":2,"react":160,"validator":161}],168:[function(require,module,exports){
 "use strict";
 
 var React = require("react");
@@ -33650,33 +33918,45 @@ var Registration = require("./components/RegistrationComponent");
 var Home = require("./components/HomeComponent");
 var Login = require("./components/LoginComponent");
 var Profile = require("./components/ProfileComponent");
+var UserModel = require("./models/UserModel");
+var Admin = require("./components/AdminPageComponent");
+var PostPage = require("./components/PostPageComponent");
+var user = new UserModel();
 
 var App = Backbone.Router.extend({
 	routes: {
 		"": "home",
 		"login": "login",
 		"registration": "registration",
-		"profile": "profile"
+		"profile": "profile",
+		"admin": "admin",
+		"post/:postId": "post"
+
 	},
 
 	home: function home() {
-		React.render(React.createElement(Home, { router: this }), document.querySelector("#container"));
+		React.render(React.createElement(Home, { router: this, user: user }), document.querySelector("#container"));
 	},
 	login: function login() {
-		React.render(React.createElement(Login, { router: this }), document.querySelector("#container"));
+		React.render(React.createElement(Login, { router: this, user: user }), document.querySelector("#container"));
 	},
 	registration: function registration() {
-		React.render(React.createElement(Registration, { router: this }), document.querySelector("#container"));
+		React.render(React.createElement(Registration, { router: this, user: user }), document.querySelector("#container"));
 	},
 	profile: function profile() {
-		React.render(React.createElement(Profile, { router: this }), document.querySelector("#container"));
+		React.render(React.createElement(Profile, { router: this, user: user }), document.querySelector("#container"));
+	},
+	admin: function admin() {
+		React.render(React.createElement(Admin, { router: this, user: user }), document.querySelector("#container"));
+	},
+	post: function post(postId) {
+		React.render(React.createElement(PostPage, { postId: postId }), document.querySelector("#container"));
 	}
 });
-
 var myApp = new App();
 Backbone.history.start();
 
-},{"./components/HomeComponent":162,"./components/LoginComponent":163,"./components/ProfileComponent":164,"./components/RegistrationComponent":165,"backbone":1,"react":160}],167:[function(require,module,exports){
+},{"./components/AdminPageComponent":162,"./components/HomeComponent":163,"./components/LoginComponent":164,"./components/PostPageComponent":165,"./components/ProfileComponent":166,"./components/RegistrationComponent":167,"./models/UserModel":170,"backbone":1,"react":160}],169:[function(require,module,exports){
 "use strict";
 
 var Backbone = require("backparse")({
@@ -33684,7 +33964,33 @@ var Backbone = require("backparse")({
 	apiKey: "ttwYgdcxcKW8Ef8FJhUWdVUtl7DVZmAd6CR7GbJp",
 	apiVersion: 1
 });
-var Vali;
+
+module.exports = Backbone.Model.extend({
+	defaults: {
+		title: "",
+		body: ""
+	},
+	parseClassName: "post",
+	idAttribute: "objectId",
+
+	validate: function validate(attr) {
+		if (!attr.title) {
+			return "Title cannot be empty.";
+		} else if (!attr.body) {
+			return "Body cannot be empty.";
+		}
+		return false;
+	}
+});
+
+},{"backparse":3}],170:[function(require,module,exports){
+"use strict";
+
+var Backbone = require("backparse")({
+	appId: "GJ01Aou5c8h554NZ8Y7vZLPnAQ61hMbh9or7I7Yc",
+	apiKey: "ttwYgdcxcKW8Ef8FJhUWdVUtl7DVZmAd6CR7GbJp",
+	apiVersion: 1
+});
 
 module.exports = Backbone.Model.extend({
 	defaults: {
@@ -33697,7 +34003,7 @@ module.exports = Backbone.Model.extend({
 	idAttribute: "objectId"
 });
 
-},{"backparse":3}]},{},[166])
+},{"backparse":3}]},{},[168])
 
 
 //# sourceMappingURL=all.js.map
